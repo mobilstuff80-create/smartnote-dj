@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartNote DJ</title>
+  
+  <!-- Configuración PWA (Manifest & Meta Tags) -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SmartNote DJ">
+
+  <style>
+    :root {
+      --bg-primary: #0f172a;
+      --bg-secondary: #1e293b;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-hover: #0284c7;
+      --danger: #ef4444;
+      --border: #334155;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    header {
+      background-color: var(--bg-secondary);
+      padding: 1rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    h1 {
+      font-size: 1.25rem;
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 1rem;
+      gap: 1rem;
+      overflow-y: auto;
+    }
+
+    .editor-card {
+      background-color: var(--bg-secondary);
+      border-radius: 12px;
+      padding: 1rem;
+      border: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    input[type="text"], textarea {
+      width: 100%;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      padding: 0.75rem;
+      border-radius: 8px;
+      font-size: 1rem;
+      outline: none;
+    }
+
+    input[type="text"]:focus, textarea:focus {
+      border-color: var(--accent);
+    }
+
+    textarea {
+      resize: none;
+      height: 100px;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    button {
+      flex: 1;
+      background-color: var(--accent);
+      color: var(--bg-primary);
+      border: none;
+      padding: 0.75rem;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    button:active {
+      background-color: var(--accent-hover);
+    }
+
+    .notes-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .note-card {
+      background-color: var(--bg-secondary);
+      border-radius: 8px;
+      padding: 1rem;
+      border: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .note-content h3 {
+      font-size: 1rem;
+      margin-bottom: 0.25rem;
+      color: var(--accent);
+    }
+
+    .note-content p {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      white-space: pre-wrap;
+    }
+
+    .btn-delete {
+      background: transparent;
+      color: var(--danger);
+      padding: 0.25rem 0.5rem;
+      font-size: 1.2rem;
+      flex: none;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>SmartNote DJ</h1>
+  </header>
+
+  <div class="container">
+    <div class="editor-card">
+      <input type="text" id="noteTitle" placeholder="Título de la nota..." />
+      <textarea id="noteBody" placeholder="Escribe tu contenido aquí..."></textarea>
+      <div class="btn-group">
+        <button id="saveBtn">Guardar Nota</button>
+      </div>
+    </div>
+
+    <div class="notes-list" id="notesContainer"></div>
+  </div>
+
+  <script>
+    // Registro del Service Worker para soporte PWA / Offline
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('Service Worker registrado con éxito:', reg.scope))
+          .catch(err => console.error('Error al registrar Service Worker:', err));
+      });
+    }
+
+    // Lógica principal de la App (Notas en LocalStorage)
+    const titleInput = document.getElementById('noteTitle');
+    const bodyInput = document.getElementById('noteBody');
+    const saveBtn = document.getElementById('saveBtn');
+    const container = document.getElementById('notesContainer');
+
+    function loadNotes() {
+      container.innerHTML = '';
+      const notes = JSON.parse(localStorage.getItem('smartnotes_dj') || '[]');
+      notes.forEach((note, index) => {
+        const card = document.createElement('div');
+        card.className = 'note-card';
+        card.innerHTML = `
+          <div class="note-content">
+            <h3>${escapeHtml(note.title)}</h3>
+            <p>${escapeHtml(note.body)}</p>
+          </div>
+          <button class="btn-delete" onclick="deleteNote(${index})">&times;</button>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function saveNote() {
+      const title = titleInput.value.trim();
+      const body = bodyInput.value.trim();
+      if (!title && !body) return;
+
+      const notes = JSON.parse(localStorage.getItem('smartnotes_dj') || '[]');
+      notes.unshift({ title: title || 'Sin título', body: body });
+      localStorage.setItem('smartnotes_dj', JSON.stringify(notes));
+
+      titleInput.value = '';
+      bodyInput.value = '';
+      loadNotes();
+    }
+
+    function deleteNote(index) {
+      const notes = JSON.parse(localStorage.getItem('smartnotes_dj') || '[]');
+      notes.splice(index, 1);
+      localStorage.setItem('smartnotes_dj', JSON.stringify(notes));
+      loadNotes();
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    saveBtn.addEventListener('click', saveNote);
+    loadNotes();
+  </script>
+</body>
+</html>
